@@ -1,6 +1,3 @@
-#if canImport(Combine)
-  import Combine
-#endif
 import Foundation
 #if canImport(FoundationNetworking)
   import FoundationNetworking
@@ -28,80 +25,6 @@ open class ApiProvider<EndpointType: Endpoint> {
     self.baseUrl = baseUrl
     self.plugins = plugins
   }
-
-  #if canImport(Combine)
-    /// Returns a publisher which performs a request to the server when new values are requested.
-    /// Returns a `EmptyBodyResponse` on success.
-    ///
-    /// - WARNING: Do not use this if you expect a body response, use `publisher(on:decodeBodyTo:)` instead.
-    public func publisher(
-      on endpoint: EndpointType
-    ) -> AnyPublisher<EmptyBodyResponse, ApiError<EndpointType.ClientErrorType>> {
-      self.publisher(on: endpoint, decodeBodyTo: EmptyBodyResponse.self)
-    }
-
-    /// Returns a publisher which performs a request to the server when new values are requested.
-    /// Specify the expected result type as the `Decodable` generic type.
-    public func publisher<ResultType: Decodable>(
-      on endpoint: EndpointType,
-      decodeBodyTo: ResultType.Type
-    ) -> AnyPublisher<ResultType, ApiError<EndpointType.ClientErrorType>> {
-      var request: URLRequest = endpoint.buildRequest(baseUrl: baseUrl)
-
-      for plugin in plugins {
-        plugin.modifyRequest(&request, endpoint: endpoint)
-      }
-
-      for plugin in plugins {
-        plugin.willPerformRequest(request, endpoint: endpoint)
-      }
-
-      var urlSessionResult: URLSessionResult?
-
-      return URLSession.shared.dataTaskPublisher(for: request)
-        .mapError { (urlError) -> ApiError<EndpointType.ClientErrorType> in
-          urlSessionResult = (data: nil, response: nil, error: urlError)
-          let apiError: ApiError<EndpointType.ClientErrorType> = self.mapToClientErrorType(error: urlError)
-          let typedResult: TypedResult<ResultType> = .failure(apiError)
-
-          for plugin in self.plugins {
-            plugin.didPerformRequest(urlSessionResult: urlSessionResult!, typedResult: typedResult, endpoint: endpoint)
-          }
-
-          return apiError
-        }
-        .tryMap { (data: Data, response: URLResponse) -> ResultType in
-          urlSessionResult = (data: data, response: response, error: nil)
-          let resultType: ResultType = try self.decodeBodyToResultType(
-            data: data,
-            response: response,
-            endpoint: endpoint
-          )
-
-          for plugin in self.plugins {
-            plugin.didPerformRequest(
-              urlSessionResult: urlSessionResult!,
-              typedResult: .success(resultType),
-              endpoint: endpoint
-            )
-          }
-
-          return resultType
-        }
-        .mapError { error in
-          let apiError = error as! ApiError<EndpointType.ClientErrorType>
-          let urlSessionResult: URLSessionResult = urlSessionResult ?? (data: nil, response: nil, error: nil)
-          let typedResult: TypedResult<ResultType> = .failure(apiError)
-
-          for plugin in self.plugins {
-            plugin.didPerformRequest(urlSessionResult: urlSessionResult, typedResult: typedResult, endpoint: endpoint)
-          }
-
-          return apiError
-        }
-        .eraseToAnyPublisher()
-    }
-  #endif
 
   /// Performs the asynchronous request for the chosen write-only endpoint and calls the completion closure with the result.
   /// Returns a `EmptyBodyResponse` on success.

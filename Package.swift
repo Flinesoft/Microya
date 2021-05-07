@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
   name: "Microya",
-  platforms: [.macOS(.v10_15), .iOS(.v13), .tvOS(.v13)],
+  platforms: [.macOS(.v10_12), .iOS(.v10), .tvOS(.v10)],
   products: [
     .library(name: "Microya", targets: ["Microya"])
   ],
